@@ -1,0 +1,378 @@
+---
+title: "Google Data Analytics Case Study"
+author: "Aaron Tang"
+date: "30/11/2021"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library("tidyverse")
+setwd("/Users/aaron_ooi/Documents/R_examples/Cyclistic_Case_Study")
+
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+```
+# Cyclistic Bike Share
+
+**Data Source**  
+[Motivate International Inc](https://divvy-tripdata.s3.amazonaws.com/index.html)
+
+### Install and Load tidyverse packages
+```{r eval=FALSE}
+install.packages("tidyverse")
+library(tidyverse)
+```
+
+# **Ask**
+#### **Business Task**  
+Cyclistic finance analysts have determined that member riders are far more profitable than 
+casual riders. The director of marketing, Lily Moreno, believes that to maximize the growth of the company, Cyclistic must increase the number of member riders. The objective is to answer how annual members and casual riders use Cyclistic bikes differently. Using this information, we then can determine a effective plan to convert Cyclistic existing casual riders to member riders.  
+
+#### **Rider Types**
+**Casual** - Single-Ride Passes, Full-Day Passes  
+**Member** - Annual Membership  
+
+#### **Key Stakeholders**  
+Director of Marketing (Lily Moreno), Cyclistic executive team, Marketing Analytics team, Finance Analysts 
+
+<hr style="height:2px;border-width:0;color:gray;background-color:black"> 
+
+# **Prepare** 
+#### **Collect the Data**  
+The data was made available by [Motivate International Inc](https://divvy-tripdata.s3.amazonaws.com/index.html) under this [licence](https://www.divvybikes.com/data-license-agreement) and was assured by Google to be appropriate for answering the business question in this case study. 
+
+```{r message=FALSE, warning=FALSE}
+q1_2020 <- read_csv(unz('./Divvy_Trips_2020_Q1.zip','Divvy_Trips_2020_Q1.csv'))
+q4_2019 <- read_csv(unz('./Divvy_Trips_2019_Q4.zip','Divvy_Trips_2019_Q4.csv'))
+q3_2019 <- read_csv(unz('./Divvy_Trips_2019_Q3.zip','Divvy_Trips_2019_Q3.csv'))
+q2_2019 <- read_csv(unz('./Divvy_Trips_2019_Q2.zip','Divvy_Trips_2019_Q2.csv'))
+```
+
+#### **How the data is organized**  
+The original trip data was organized into yearly quarters.  
+The 4 most recent yearly quarters data is used to have the most up to date data to analyze. 
+
+```{r}
+str(q1_2020)
+str(q4_2019)
+str(q3_2019)
+str(q2_2019)
+```
+  
+
+#### **Problems with the Data**  
+* Inconsistent column names, value nomenclature and types
+* Missing columns in some data sets
+* Contains unnecessary columns 
+
+<hr style="height:2px;border-width:0;color:gray;background-color:black"> 
+
+# **Process** 
+
+#### **Follow column naming convention from the most recent data set (q1_2020)**
+``` {r results="hide"}
+(q4_2019 <- rename(q4_2019
+                   ,ride_id = trip_id
+                   ,rideable_type = bikeid 
+                   ,started_at = start_time  
+                   ,ended_at = end_time  
+                   ,start_station_name = from_station_name 
+                   ,start_station_id = from_station_id 
+                   ,end_station_name = to_station_name 
+                   ,end_station_id = to_station_id 
+                   ,member_casual = usertype))
+
+(q3_2019 <- rename(q3_2019
+                   ,ride_id = trip_id
+                   ,rideable_type = bikeid 
+                   ,started_at = start_time  
+                   ,ended_at = end_time  
+                   ,start_station_name = from_station_name 
+                   ,start_station_id = from_station_id 
+                   ,end_station_name = to_station_name 
+                   ,end_station_id = to_station_id 
+                   ,member_casual = usertype))
+
+(q2_2019 <- rename(q2_2019
+                   ,ride_id = "01 - Rental Details Rental ID"
+                   ,rideable_type = "01 - Rental Details Bike ID" 
+                   ,started_at = "01 - Rental Details Local Start Time"  
+                   ,ended_at = "01 - Rental Details Local End Time"  
+                   ,start_station_name = "03 - Rental Start Station Name" 
+                   ,start_station_id = "03 - Rental Start Station ID"
+                   ,end_station_name = "02 - Rental End Station Name" 
+                   ,end_station_id = "02 - Rental End Station ID"
+                   ,member_casual = "User Type"))
+```
+
+#### **Convert all ride_id and rideable_type to character data type**
+```{r results="hide"}
+q4_2019 <-  mutate(q4_2019, ride_id = as.character(ride_id)
+                   ,rideable_type = as.character(rideable_type)) 
+q3_2019 <-  mutate(q3_2019, ride_id = as.character(ride_id)
+                   ,rideable_type = as.character(rideable_type)) 
+q2_2019 <-  mutate(q2_2019, ride_id = as.character(ride_id)
+                   ,rideable_type = as.character(rideable_type)) 
+```
+
+#### **Combine all quarters into one data frame**
+```{r results="hide"}
+all_trips <- bind_rows(q2_2019, q3_2019, q4_2019, q1_2020)
+```
+#### **Remove unnecessary columns**  
+Columns related to gender, birth year, latitude and longitude will be removed as it won't used in the analysis.
+"tripduration" and "01 - Rental Details Duration In Seconds Uncapped" will be removed and replaced by "ride_length".
+```{r results="hide"}
+all_trips <- all_trips %>%  
+  select(-c(start_lat, start_lng, end_lat, end_lng, birthyear, gender, "05 - Member Details Member Birthday Year", "Member Gender", "01 - Rental Details Duration In Seconds Uncapped", "tripduration"))
+```
+
+#### **Inspect "all_trips" for data cleaning**
+```{r}
+summary(all_trips)
+str(all_trips)
+```
+
+#### **Standardize "member_casual" column values to fit q1_2020 nomenclature**
+Replace "Subscriber" with "member"  
+Replace "Customer" with "casual"
+```{r results="hide"}
+all_trips <-  all_trips %>% 
+  mutate(member_casual = recode(member_casual,"Subscriber" = "member", "Customer" = "casual"))
+```
+
+Ensure all values for member_casual were properly assigned 
+```{r}
+table(all_trips$member_casual)
+```
+
+#### **Create columns for data, year, month and day of every trip start time**
+```{r results="hide"}
+all_trips$date <- as.Date(all_trips$started_at) #The default format is yyyy-mm-dd
+all_trips$month <- format(as.Date(all_trips$date), "%m")
+all_trips$day <- format(as.Date(all_trips$date), "%d")
+all_trips$year <- format(as.Date(all_trips$date), "%Y")
+all_trips$day_name <- format(as.Date(all_trips$date), "%a")
+all_trips$month_name <- format(as.Date(all_trips$date), "%b")
+
+
+#Fix the order of the days
+all_trips$day_name <- ordered(all_trips$day_name, levels=c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))
+
+#Fix the order of the months
+all_trips$month_name <- ordered(all_trips$month_name, levels=c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+```
+
+#### **Add "ride_length column (in seconds)**
+```{r results="hide"}
+all_trips$ride_length <- difftime(all_trips$ended_at,all_trips$started_at, units="secs")
+```
+
+#### **Convert "ride_length" type from difftime to numeric**
+```{r results="hide"} 
+is.numeric(all_trips$ride_length)
+all_trips$ride_length <- as.numeric(all_trips$ride_length)
+is.numeric(all_trips$ride_length)
+```
+
+#### **Inspect "ride_length", "start_station_name" and "end_station_name"**
+Check for "ride_length" that is less than or equal to zero.  
+"ride_length" values less than or equal to zero are invalid and will be removed.  
+```{r}
+range(all_trips$ride_length)
+```
+
+Check for anomalies in start_station_name and end_station_name  
+```{r eval=FALSE}
+unique(sort(all_trips$start_station_name))
+unique(sort(all_trips$end_station_name))
+```
+
+#### **Findings**
+* Values in "ride_length" less than or equal to zero was found
+* Found several station names in "start_station_name" and "end_station_name" that represented repairs, tests, or special events done by Cyclistic. For example, "DIVVY CASSETTE REPAIR MOBILE STATION", "DIVVY Map Frame B/C Station" and more.
+* Some station names include "(\*)" and "(Temp)" at the end of the station names. At times, the station names are repeated but with "(\*)" or "(Temp)" at the end of the station name. For example, "Sangamon St & Washington Blvd" and "Sangamon St & Washington Blvd (\*)"  
+
+<br/>  
+
+#### **Remove all instances where "start_station_name" or "end_station_name" contains a value that indicates repairs, tests or special events done by Cyclistic and "ride_length" values less than or equal to zero**
+Create new Data Frame since data is being removed 
+```{r results="hide"}
+all_trips_v2 <- all_trips[!(all_trips$start_station_name == "HQ QR" | all_trips$end_station_name == "HQ QR"| 
+                              all_trips$start_station_name == "DIVVY CASSETTE REPAIR MOBILE STATION" | all_trips$end_station_name == "DIVVY CASSETTE REPAIR MOBILE STATION"|
+                              all_trips$start_station_name == "DIVVY Map Frame B/C Station" | all_trips$end_station_name == "DIVVY Map Frame B/C Station"| 
+                              all_trips$start_station_name == "HUBBARD ST BIKE CHECKING (LBS-WH-TEST)" | all_trips$end_station_name == "HUBBARD ST BIKE CHECKING (LBS-WH-TEST)"| 
+                              all_trips$start_station_name == "LBS - BBB La Magie" | all_trips$end_station_name == "LBS - BBB La Magie"| 
+                              all_trips$start_station_name == "MTL-ECO5.1-01" | all_trips$end_station_name == "MTL-ECO5.1-01"| 
+                              all_trips$start_station_name == "Special Events" | all_trips$end_station_name == "Special Events"| 
+                              all_trips$ride_length<=0),]
+```
+
+#### **Remove substrings " (\*)" and " (Temp)" in all station names**
+```{r results="hide"}
+all_trips_v2$start_station_name = gsub(" (*)","",all_trips_v2$start_station_name, fixed = TRUE)
+all_trips_v2$start_station_name = gsub(" (Temp)","", all_trips_v2$start_station_name, fixed = TRUE)
+all_trips_v2$end_station_name = gsub(" (*)","",all_trips_v2$end_station_name, fixed = TRUE)
+all_trips_v2$end_station_name = gsub(" (Temp)","", all_trips_v2$end_station_name, fixed = TRUE)
+```
+
+#### **Check for missing values**
+```{r}
+sum(is.na(all_trips_v2)) 
+```
+<hr style="height:2px;border-width:0;color:gray;background-color:black">  
+
+# **Analyze**  
+
+#### **Compare Min, Max, Median, Mean**
+```{r}
+#Min
+aggregate(ride_length ~ member_casual, data = all_trips_v2 ,FUN = min)
+#Max
+aggregate(ride_length ~ member_casual, data = all_trips_v2 ,FUN = max)
+#Median
+aggregate(ride_length ~ member_casual, data = all_trips_v2 ,FUN = median)
+#Mean
+aggregate(ride_length ~ member_casual, data = all_trips_v2 ,FUN = mean)
+```
+<br />
+<br />  
+```{r echo=FALSE}
+all_trips_v2 %>% 
+  group_by(member_casual, month_name) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = month_name, y = number_of_rides/1000, fill = member_casual)) + geom_col(position = "dodge") +
+  labs(title = "Total number of riders by Month and Rider Type", fill = "Rider Type", x = "Month", y = "Number of Rides (1000s)") +
+  theme(axis.text.x = element_text(angle = 90, size = 8)) +
+  scale_fill_manual(values=c("#005FCF","#008B71"))
+```
+<br />
+<br />
+```{r echo=FALSE}
+all_trips_v2 %>% 
+  group_by(member_casual, day_name) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = day_name, y = number_of_rides/10000, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Total number of riders by Day of Week and Rider Type", fill = "Rider Type", x = "Day of the Week", y = "Number of Rides (1000s)") +
+  theme(axis.text.x = element_text(angle = 90, size = 8)) +
+  scale_fill_manual(values=c("#005FCF","#008B71"))
+```
+<br />
+<br />  
+```{r echo=FALSE}
+all_trips_v2 %>% 
+  mutate(hour_started_at = format(as.POSIXct(started_at), format = "%H")) %>%
+  group_by(member_casual, hour_started_at) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = hour_started_at, y = number_of_rides/1000, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Total number of riders by Hour and Rider Type", fill = "Rider Type", x = "Hour of the Day (24-Hour Format)", y = "Number of Rides (1000s)") +
+  theme(axis.text.x = element_text(angle = 90, size = 8)) +
+  scale_fill_manual(values=c("#005FCF","#008B71"))
+```
+<br />  
+<br />  
+```{r echo=FALSE}
+all_trips_v2 %>% 
+  group_by(member_casual, day_name) %>%
+  summarise(average_duration = mean(ride_length)) %>%
+  ggplot(aes(x = day_name, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Average ride length by Day of Week and Rider Type", fill = "Rider Type", x = "Day of the Week", y = "Average Ride Length (Seconds)") +
+  theme(axis.text.x = element_text(angle = 45)) +
+  scale_fill_manual(values=c("#005FCF","#008B71"))
+```
+<br />  
+
+#### **Determine the Top 5 most start popular stations for "member" riders (Most -> Least)**  
+#### **"Canal St & Adams St", "Clinton St & Madison St", "Clinton St & Washington Blvd", "Columbus Dr & Randolph St", "Franklin St & Monroe St"**
+```{r echo=FALSE}
+sort(table(subset(all_trips_v2, member_casual=="member")$start_station_name), decreasing = TRUE)[1:5] 
+```
+<br />  
+
+#### **Determine the Top 5 most start popular stations for "casual" riders (Most -> Least)**  
+#### **"Streeter Dr & Grand Ave", "Lake Shore Dr & Monroe St", "Millennium Park", "Michigan Ave & Oak St", "Shedd Aquarium"**
+```{r echo=FALSE}
+sort(table(subset(all_trips_v2, member_casual=="casual")$start_station_name), decreasing = TRUE)[1:5] 
+```
+<br />  
+```{r echo=FALSE}
+all_trips_v2 %>% 
+  group_by(member_casual, start_station_name) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = start_station_name, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  scale_x_discrete(limits=c("Canal St & Adams St", "Clinton St & Madison St", "Clinton St & Washington Blvd", "Columbus Dr & Randolph St", "Franklin St & Monroe St", "Streeter Dr & Grand Ave", "Lake Shore Dr & Monroe St", "Millennium Park", "Michigan Ave & Oak St", "Shedd Aquarium"))+ 
+  labs(title = "Most popular start stations for \"member\" and \"casual\" riders", fill = "Rider Type", x = "Station Name", y = "Number of Rides") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values=c("#005FCF","#008B71"))
+```
+<br />
+<br />
+
+#### **Determine the Top 5 most end popular stations for member riders (Most -> Least)**  
+#### **Canal St & Adams St, Clinton St & Washington Blvd, Clinton St & Madison St, Daley Center Plaza, Kingsbury St & Kinzie St**
+```{r}
+sort(table(subset(all_trips_v2, member_casual=="member")$end_station_name), decreasing = TRUE)[1:5] 
+```
+<br />
+
+#### **Determine the Top 5 most end popular stations for casual riders (Most -> Least)**  
+#### **"Streeter Dr & Grand Ave", "Lake Shore Dr & Monroe St", "Millennium Park", "Michigan Ave & Oak St", "Lake Shore & North Blvd"**
+```{r}
+sort(table(subset(all_trips_v2, member_casual=="casual")$end_station_name), decreasing = TRUE)[1:5] 
+```
+<br />
+```{r echo=FALSE}
+all_trips_v2 %>% 
+  group_by(member_casual, end_station_name) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = end_station_name, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  scale_x_discrete(limits=c("Canal St & Adams St", "Clinton St & Washington Blvd", "Clinton St & Madison St", "Daley Center Plaza", "Kingsbury St & Kinzie St", "Streeter Dr & Grand Ave", "Lake Shore Dr & Monroe St", "Millennium Park", "Michigan Ave & Oak St", "Lake Shore Dr & North Blvd")) + 
+  labs(title = "Most popular end stations for \"member\" and \"casual\" riders", fill = "Rider Type", x = "Station Name", y = "Number of Rides") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values=c("#005FCF","#008B71"))
+```
+<hr style="height:2px;border-width:0;color:gray;background-color:black">  
+
+# **Act** 
+
+#### **Key Findings**
+**1. "member" rider patterns indicate a large portion of riders use their membership to commute to work**  
+- Number of "member" riders peak around 9 AM and 5 PM (Typical start/end work hours)  
+- Number of "member" riders peak during the weekdays  
+
+**2. Warmer months have the highest ridership for both "casual" and "member" riders**  
+- June, July, August and September
+
+**3. "casual" ridership peak on the weekend and "member" ridership peak on the weekdays**  
+
+**4. "member" riders ride lengths are much shorter than "casual" riders**  
+- "casual" average ride length is 3344.004 seconds (55 minutes and 44.004 seconds)  
+- "member" average ride length is 832.834 seconds (13 minutes and 52.834 seconds)  
+
+**5. No commonalities between most popular starting/end locations for "member" and "casual" riders**  
+<br/>  
+
+#### **Recommendations** 
+**1. New membership (Weekend Membership Special)**  
+- Unlimited rides  
+- Weekdays 30 Minutes Max rides  
+- Weekdays 90 Minutes Max rides  
+
+**2. Advertise in most popular start/end stations for "casual" riders**  
+- "Streeter Dr & Grand Ave", "Lake Shore Dr & Monroe St" and "Millennium Park"  
+
+**3. Advertise on the weekends during the warmer months (June - September)**  
+- Peak "casual" ridership during those days and months  
+- "casual" ridership drops drastically during colder months  
+
+**4. Email marketing promoting the use of Cylistic Bikes for commuting to work**  
+- Emphasize convenience and a healthy lifestyle  
+- 30% of riders are already using Cylistic Bikes for commuting, a majority of which are "member" riders  
+
+**5. Collaborate with recreational places/events to offer special ticket prices or discounts on foods for new "member" riders** 
+- Select recreational places/events that are in close proximity to the most popular start/end stations for "casual" riders  
